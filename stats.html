@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>El Chañar - Estadísticas QR</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',sans-serif; background:#faf6f1; color:#1a1a2e; min-height:100vh; }
+    .header { background:#fff; border-bottom:2px solid #f0e8df; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-icon { font-size:22px; color:#E8640A; }
+    .logo-text { font-size:18px; font-weight:700; }
+    .logo-sub { font-size:12px; color:#8a8578; }
+    .btn-refresh { background:#E8640A; color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .btn-refresh:hover { opacity:.85; }
+    .content { max-width:540px; margin:0 auto; padding:24px 16px; }
+    .tabs { display:flex; gap:4px; background:#f0e8df; padding:4px; border-radius:10px; margin-bottom:20px; }
+    .tab { flex:1; padding:10px; border:none; background:transparent; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; font-family:inherit; color:#8a8578; transition:all .15s; }
+    .tab.active { background:#1a1a2e; color:#fff; font-weight:700; }
+    .loading { text-align:center; padding:60px 20px; color:#8a8578; }
+    .spinner { width:36px; height:36px; border:3px solid #f0e8df; border-top:3px solid #E8640A; border-radius:50%; animation:spin .7s linear infinite; margin:0 auto 14px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .stats-row { display:flex; gap:12px; margin-bottom:20px; }
+    .stat-card { flex:1; background:#fff; border:1.5px solid #f0e8df; border-radius:12px; padding:18px 14px; text-align:center; }
+    .stat-num { font-size:32px; font-weight:700; line-height:1; }
+    .stat-label { font-size:11px; color:#8a8578; margin-top:4px; text-transform:uppercase; letter-spacing:.06em; }
+    .chart-card { background:#fff; border:1.5px solid #f0e8df; border-radius:12px; padding:18px; margin-bottom:20px; }
+    .chart-title { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:#8a8578; margin-bottom:14px; }
+    .chart { display:flex; align-items:flex-end; gap:6px; height:100px; }
+    .chart-bar { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; }
+    .chart-bar-track { flex:1; width:100%; background:#f5f0ea; border-radius:4px; display:flex; align-items:flex-end; overflow:hidden; }
+    .chart-bar-fill { width:100%; background:#E8640A; border-radius:4px; transition:height .4s ease; min-height:2px; }
+    .chart-bar-count { font-size:11px; font-weight:700; }
+    .chart-bar-label { font-size:9px; color:#8a8578; }
+    .timeline-card { background:#fff; border:1.5px solid #f0e8df; border-radius:12px; overflow:hidden; margin-bottom:14px; }
+    .day-header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:#faf6f1; border-bottom:1px solid #f0e8df; }
+    .day-label { font-size:14px; font-weight:700; text-transform:capitalize; }
+    .day-count { font-size:12px; color:#8a8578; }
+    .scan-row { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid #faf6f1; }
+    .scan-row:last-child { border-bottom:none; }
+    .scan-dot { width:8px; height:8px; border-radius:50%; background:#E8640A; flex-shrink:0; }
+    .scan-info { display:flex; justify-content:space-between; flex:1; align-items:center; }
+    .scan-time { font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
+    .scan-device { font-size:12px; color:#8a8578; }
+    .empty-state { text-align:center; padding:60px 20px; color:#8a8578; }
+    .empty-icon { font-size:48px; margin-bottom:16px; opacity:.3; }
+    .empty-text { font-size:16px; margin-bottom:6px; color:#1a1a2e; }
+    .empty-sub { font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <span class="logo-icon">&#9670;</span>
+      <div>
+        <div class="logo-text">El Chanar</div>
+        <div class="logo-sub">Estadisticas de los QR</div>
+      </div>
+    </div>
+    <button class="btn-refresh" onclick="loadCurrent()">Actualizar</button>
+  </div>
+  <div class="content">
+    <div class="tabs">
+      <button class="tab active" id="tab1" onclick="switchTab('qr1')">QR 1</button>
+      <button class="tab" id="tab2" onclick="switchTab('qr2')">QR 2</button>
+    </div>
+    <div id="app"><div class="loading"><div class="spinner"></div><p>Cargando...</p></div></div>
+  </div>
+  <script>
+    var QRS = {
+      qr1: { binId: "69e92f18856a68218960b26e", label: "QR 1" },
+      qr2: { binId: "69ea0b23aaba8821972c9967", label: "QR 2" }
+    };
+    var API_KEY = "$2a$10$EqJaXM/hwUseOhRgGEjsG.yBpzJLYn.Fw/E0nCMTyzRhl6yokw6wu";
+    var currentTab = "qr1";
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById("tab1").className = tab === "qr1" ? "tab active" : "tab";
+      document.getElementById("tab2").className = tab === "qr2" ? "tab active" : "tab";
+      loadCurrent();
+    }
+
+    function loadCurrent() { loadData(QRS[currentTab].binId, QRS[currentTab].label); }
+
+    function detectDevice(ua) {
+      if (!ua) return "Desconocido";
+      if (/iPhone/i.test(ua)) return "iPhone";
+      if (/Samsung/i.test(ua)) return "Samsung";
+      if (/Xiaomi|Redmi|POCO/i.test(ua)) return "Xiaomi";
+      if (/Huawei/i.test(ua)) return "Huawei";
+      if (/Motorola|moto/i.test(ua)) return "Motorola";
+      if (/Android/i.test(ua)) return "Android";
+      if (/Windows/i.test(ua)) return "PC";
+      if (/Mac/i.test(ua)) return "Mac";
+      return "Otro";
+    }
+
+    function formatTime(iso) {
+      return new Date(iso).toLocaleTimeString("es-AR", { hour:"2-digit", minute:"2-digit" });
+    }
+
+    function formatDay(iso) {
+      return new Date(iso).toLocaleDateString("es-AR", { weekday:"long", day:"2-digit", month:"long" });
+    }
+
+    function groupByDay(scans) {
+      var g = {};
+      for (var i = 0; i < scans.length; i++) {
+        var d = formatDay(scans[i].timestamp);
+        if (!g[d]) g[d] = [];
+        g[d].push(scans[i]);
+      }
+      return g;
+    }
+
+    function todayStr() {
+      return new Date().toLocaleDateString("es-AR", { weekday:"long", day:"2-digit", month:"long" });
+    }
+
+    function loadData(binId, label) {
+      var app = document.getElementById("app");
+      app.innerHTML = '<div class="loading"><div class="spinner"></div><p>Cargando ' + label + '...</p></div>';
+
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "https://api.jsonbin.io/v3/b/" + binId + "/latest", true);
+      xhr.setRequestHeader("X-Master-Key", API_KEY);
+      xhr.setRequestHeader("X-Bin-Meta", "false");
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var data = JSON.parse(xhr.responseText);
+            var scans = (data.scans || []).slice().reverse();
+            renderStats(scans, label);
+          } catch(e) {
+            app.innerHTML = '<div class="empty-state"><p class="empty-text">Error al leer los datos</p><p class="empty-sub">' + e.message + '</p></div>';
+          }
+        } else {
+          app.innerHTML = '<div class="empty-state"><p class="empty-text">Error al cargar (' + xhr.status + ')</p><p class="empty-sub">Intenta de nuevo.</p></div>';
+        }
+      };
+      xhr.onerror = function() {
+        app.innerHTML = '<div class="empty-state"><p class="empty-text">Error de conexion</p><p class="empty-sub">Verifica tu internet e intenta de nuevo.</p></div>';
+      };
+      xhr.send();
+    }
+
+    function renderStats(scans, label) {
+      var app = document.getElementById("app");
+
+      if (scans.length === 0) {
+        app.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9670;</div><p class="empty-text">Todavia no hay escaneos en ' + label + '</p><p class="empty-sub">Cuando alguien escanee el QR, los datos aparecen aca.</p></div>';
+        return;
+      }
+
+      var grouped = groupByDay(scans);
+      var today = todayStr();
+      var todayCount = (grouped[today] || []).length;
+      var total = scans.length;
+      var lastScan = formatTime(scans[0].timestamp);
+
+      var html = '<div class="stats-row">';
+      html += '<div class="stat-card"><div class="stat-num">' + total + '</div><div class="stat-label">Total</div></div>';
+      html += '<div class="stat-card"><div class="stat-num">' + todayCount + '</div><div class="stat-label">Hoy</div></div>';
+      html += '<div class="stat-card"><div class="stat-num" style="font-size:16px;margin-top:8px">' + lastScan + '</div><div class="stat-label">Ultimo</div></div>';
+      html += '</div>';
+
+      var dayKeys = Object.keys(grouped);
+      var days = dayKeys.slice(0, 7).reverse();
+      var maxCount = 1;
+      for (var i = 0; i < days.length; i++) {
+        if (grouped[days[i]].length > maxCount) maxCount = grouped[days[i]].length;
+      }
+
+      html += '<div class="chart-card"><div class="chart-title">Escaneos por dia</div><div class="chart">';
+      for (var i = 0; i < days.length; i++) {
+        var dayScans = grouped[days[i]];
+        var pct = Math.max(5, (dayScans.length / maxCount) * 100);
+        var lbl = days[i].split(" ")[0].substring(0, 3);
+        html += '<div class="chart-bar"><div class="chart-bar-track"><div class="chart-bar-fill" style="height:' + pct + '%"></div></div><span class="chart-bar-count">' + dayScans.length + '</span><span class="chart-bar-label">' + lbl + '</span></div>';
+      }
+      html += '</div></div>';
+
+      for (var d = 0; d < dayKeys.length; d++) {
+        var day = dayKeys[d];
+        var dayScans = grouped[day];
+        html += '<div class="timeline-card"><div class="day-header"><span class="day-label">' + day + '</span><span class="day-count">' + dayScans.length + ' escaneo' + (dayScans.length !== 1 ? 's' : '') + '</span></div>';
+        for (var s = 0; s < dayScans.length; s++) {
+          var device = detectDevice(dayScans[s].userAgent);
+          html += '<div class="scan-row"><div class="scan-dot"></div><div class="scan-info"><span class="scan-time">' + formatTime(dayScans[s].timestamp) + '</span><span class="scan-device">' + device + '</span></div></div>';
+        }
+        html += '</div>';
+      }
+
+      app.innerHTML = html;
+    }
+
+    loadCurrent();
+  </script>
+</body>
+</html>
